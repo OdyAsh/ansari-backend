@@ -8,6 +8,7 @@ from datetime import date, datetime
 import litellm
 from langfuse.decorators import langfuse_context, observe
 
+from ansari.ansari_db import MessageLogger
 from ansari.ansari_logger import get_logger
 from ansari.tools.search_hadith import SearchHadith
 from ansari.tools.search_quran import SearchQuran
@@ -19,7 +20,7 @@ logger = get_logger()
 
 
 class Ansari:
-    def __init__(self, settings, message_logger=None, json_format=False):
+    def __init__(self, settings, message_logger: MessageLogger = None, json_format=False):
         self.settings = settings
         self.json_format = json_format
         self.message_logger = message_logger
@@ -215,6 +216,10 @@ class Ansari:
                 metadata={"delta": delta},
             )
             if self.message_logger:
+                # TODO(odyash) soon: relocate .log() logic to be after elif below, and to log dict of last message
+                #   (and change .log()'s implementation accordingly, to be also used for storing into whatsapp)
+                #   (Tip: to indicate this, we'll probably store a for_whatsapp flag in Ansari() to be passed to .log())
+                # TODO(odyash) soon: store "function_name" as well in the message (if possible, and role == tool)
                 self.message_logger.log("assistant", words)
 
         elif response_mode == "tool":
@@ -255,11 +260,11 @@ class Ansari:
         results = tool_instance.run_as_list(query)
 
         # we have to first add this message before any tool response, as mentioned in this source:
-        # https://platform.openai.com/docs/guides/function-calling/step-5-provide-the-function-call-result-back-to-the-model
+        # https://platform.openai.com/docs/guides/function-calling#submitting-function-output
         self.message_history.append(
             {
                 "role": "assistant",
-                "content": "",
+                "content": "",  # Optional, but added for consistency
                 "tool_calls": [
                     {"type": "function", "id": tool_id, "function": tool_definition},
                 ],
@@ -280,5 +285,13 @@ class Ansari:
         # Now we have to pass the results back in
         results_str = msg_prefix + "\nAnother relevant ayah:\n".join(results)
         self.message_history.append(
-            {"role": "tool", "content": results_str, "tool_call_id": tool_id},
+            {
+                "role": "tool",
+                "content": results_str,
+                "tool_call_id": tool_id,
+                # "name": tool_name, # TODO(odyash) soon: add this to message history if we want to save the tool name in DB
+            },
         )
+
+        if self.message_logger:
+            self.message_logger.log("tool", results_str)

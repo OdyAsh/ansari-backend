@@ -24,15 +24,17 @@ class MessageLogger:
     without having to share details about the user_id and the thread_id
     """
 
-    def __init__(self, db, user_id: int, thread_id: int, trace_id: int) -> None:
+    def __init__(self, db: "AnsariDB", user_id: int, thread_id: int, trace_id: int) -> None:
         self.user_id = user_id
         self.thread_id = thread_id
         self.trace_id = trace_id
         logger.debug(f"DB is {db}")
         self.db = db
 
-    def log(self, role, content, tool_name=None):
-        self.db.append_message(self.user_id, self.thread_id, role, content, tool_name)
+    def log(self, role: str, content: str, tool_name: str = None, tool_call_id: str = None):
+        # TODO (odyash): check if "function_name" can be renamed to
+        # "tool" like the rest of the codebase or not
+        self.db.append_message(self.user_id, self.thread_id, role, content, tool_name, tool_call_id)
 
 
 class AnsariDB:
@@ -351,7 +353,9 @@ class AnsariDB:
             logger.warning(f"Error is {e}")
             return {"status": "failure", "error": str(e)}
 
-    def append_message(self, user_id, thread_id, role, content, tool_name=None):
+    def append_message(
+        self, user_id: int, thread_id: str, role: str, content: str, tool_name: str = None, tool_call_id: str = None
+    ):
         try:
             # TODO (odyash): check if "function" can be renamed to
             # "tool" like the rest of the codebase or not
